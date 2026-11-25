@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install the latest OpenLolo device release from GitHub on a Debian 13 / Raspberry Pi OS 64-bit box.
 #
-#   curl -fsSL https://raw.githubusercontent.com/sparkyideainc/openlolo/main/apps/device/install.sh | sudo sh
+#   curl -fsSL https://raw.githubusercontent.com/YOUR1/openlolo/main/apps/device/install.sh | sudo sh
 #   curl -fsSL .../install.sh | sudo sh -s -- --no-remote      # any apps/device/scripts/install.sh option after --
 #   OPENLOLO_RELEASE=0.0.3 ... | sudo sh                        # pin a release instead of the latest
 #   OPENLOLO_REPO=you/OpenLolo ... | sudo sh                    # install from a fork
@@ -12,7 +12,7 @@
 set -eu
 [ "$(id -u)" = 0 ] || { echo 'Run as root: curl ... | sudo sh' >&2; exit 1; }
 command -v curl >/dev/null 2>&1 || { echo 'curl is required: apt-get install -y curl' >&2; exit 1; }
-repo=${OPENLOLO_REPO:-sparkyideainc/openlolo}
+repo=${OPENLOLO_REPO:-YOUR1/openlolo}
 release=${OPENLOLO_RELEASE:-}
 if [ -n "$release" ]; then
   api=https://api.github.com/repos/$repo/releases/tags/v${release#v}

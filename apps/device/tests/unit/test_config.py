@@ -119,7 +119,7 @@ def test_board_profile_defaults_to_auto_and_loads_from_box_toml(tmp_path):
 
 
 def test_update_repo_defaults_and_rejects_paths():
-    assert Config(backend="simulated").update_repo == "sparkyideainc/openlolo"
+    assert Config(backend="simulated").update_repo == "YOUR1/openlolo"
     assert Config(backend="simulated", update_repo="you/fork").update_repo == "you/fork"
     for value in ("../../etc", "you/fork/extra", "you", "you/fo rk"):
         with pytest.raises(ValueError):

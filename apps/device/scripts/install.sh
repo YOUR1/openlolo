@@ -13,7 +13,7 @@ case "${ID:-}:${VERSION_CODENAME:-}" in
   debian:trixie|raspios:trixie|raspbian:trixie) ;;
   *) echo "Supported systems are Debian 13 ARM64 and Raspberry Pi OS 64-bit (trixie); found ${PRETTY_NAME:-unknown}." >&2; exit 1 ;;
 esac
-usage='Usage: install.sh [source-directory] [--remote tailscale|cloudflare | --no-remote] [--auth-key KEY] [--hostname HOST] [--tunnel-token TOKEN] [--wifi-country CC] [--vm [--trusted-network CIDR]...] [--debug] [--upgrade]'
+usage='Usage: install.sh [source-directory] [--remote tailscale|cloudflare | --no-remote] [--auth-key KEY] [--hostname HOST] [--tunnel-token TOKEN] [--wifi-country CC] [--vm [--trusted-network CIDR]... | --no-vm] [--debug] [--upgrade]'
 source_dir=
 remote=tailscale   # Remote MCP entry (ADR 0003) is part of the standard install; --no-remote for LAN-only.
 auth_key=${TS_AUTHKEY:-}           # Tailscale auth key (unattended tailnet join).
@@ -24,7 +24,9 @@ debug=   # --debug: keep the journal across power loss (bench boxes; adds storag
 # --vm: a box without a Wi-Fi radio, e.g. a Linux VM with the iPhone passed through over USB
 # (OrbStack, UTM). No setup access point (setup_ap = false in box.toml); --trusted-network names
 # the private networks whose browsers stand in for the box's own Wi-Fi (setup_trusted_networks).
+# Turned on by itself in a VM or container without a Wi-Fi radio; --no-vm keeps it off.
 vm=
+no_vm=
 trusted_networks=
 # --upgrade: unattended update of an installed box (openlolo-update.service). Keeps the options
 # recorded in /etc/openlolo/install.env, leaves remote access alone, skips apt-get when the OS
@@ -39,6 +41,7 @@ while [ $# -gt 0 ]; do
     --no-remote) remote=; shift ;;
     --debug) debug=1; shift ;;
     --vm) vm=1; shift ;;
+    --no-vm) no_vm=1; vm=; shift ;;
     --trusted-network)
       net=${2:?--trusted-network needs a CIDR such as 198.19.249.1/32}
       case "$net" in *[!0-9A-Fa-f.:/]*|'') echo "Not a network: $net" >&2; exit 1 ;; esac
@@ -67,6 +70,14 @@ if [ -n "$upgrade" ]; then
 fi
 remote_record=$remote   # what install.env keeps; an upgrade never runs the remote-access step
 [ -z "$upgrade" ] || remote=
+if [ -n "$no_vm" ]; then
+  vm=
+elif [ -z "$vm" ] && [ -z "$upgrade" ] && systemd-detect-virt -q 2>/dev/null &&
+  ! ls -d /sys/class/net/*/wireless >/dev/null 2>&1; then
+  vm=1
+  printf 'Running in %s without a Wi-Fi radio: VM mode (no setup Wi-Fi). Use --no-vm to turn it off.\n' \
+    "$(systemd-detect-virt 2>/dev/null)"
+fi
 [ -n "$wifi_country" ] || [ -n "$upgrade" ] || [ -n "$vm" ] || wifi_country=US
 [ -z "$trusted_networks" ] || [ -n "$vm" ] || { echo '--trusted-network needs --vm' >&2; exit 1; }
 case "$remote" in ''|tailscale|cloudflare) ;; *) echo "Unsupported --remote provider: $remote" >&2; exit 1 ;; esac

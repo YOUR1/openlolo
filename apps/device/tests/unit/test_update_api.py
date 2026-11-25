@@ -20,7 +20,7 @@ from openlolo.application.update import (
 )
 from openlolo.domain.errors import OpenLoloError
 
-REPO = "sparkyideainc/openlolo"
+REPO = "YOUR1/openlolo"
 
 
 def release(version="0.0.3", *, repo=REPO, **changes):

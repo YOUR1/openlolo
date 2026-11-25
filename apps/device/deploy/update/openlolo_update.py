@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-DEFAULT_REPO = "sparkyideainc/openlolo"
+DEFAULT_REPO = "YOUR1/openlolo"
 VERSION_RE = re.compile(r"^(\d{1,4})\.(\d{1,4})\.(\d{1,6})$")
 ATTEMPT_RE = re.compile(r"^[A-Za-z0-9-]{1,64}$")
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$")

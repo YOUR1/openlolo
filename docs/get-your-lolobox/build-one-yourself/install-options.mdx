@@ -17,6 +17,7 @@ curl -fsSL https://openlolo.com/install.sh | sudo sh -s -- --no-remote
 | `--hostname HOST` | Hostname for Cloudflare Tunnel |
 | `--tunnel-token TOKEN` | Dashboard-managed Cloudflare tunnel (needs `--hostname`) |
 | `--wifi-country CC` | Two-letter Wi-Fi country code |
-| `--vm` | Box without a Wi-Fi radio, such as a [VM](/docs/get-your-lolobox/build-one-yourself/orbstack-vm): no setup Wi-Fi |
+| `--vm` | Box without a Wi-Fi radio, such as a [VM](/docs/get-your-lolobox/build-one-yourself/orbstack-vm): no setup Wi-Fi. On by itself in a VM without a radio |
+| `--no-vm` | Keep VM mode off |
 | `--trusted-network CIDR` | With `--vm`: a private network whose browsers may open the box page during setup. Repeat for more than one |
 | `--debug` | Debug logging |

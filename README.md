@@ -10,6 +10,29 @@ every AI that connects, and you can stop it at any time.
 [Website](https://openlolo.com) · [Docs](https://openlolo.com/docs/introduction) ·
 [Shop](https://openlolo.com/shop)
 
+## Run it from a VM (this fork)
+
+This fork runs OpenLolo in a Linux VM on your Mac, with no LoloBox needed. We built and tested
+it with [OrbStack](https://orbstack.dev) on a Mac Studio with Apple silicon. OrbStack passes the
+iPhone through to a Debian machine over USB.
+
+```sh
+orb create debian:trixie lolobox
+orb usb attach <iphone-id> -m lolobox    # find the ID with: orb usb list
+orb -m lolobox
+```
+
+Then, in the machine:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/YOUR1/openlolo/main/apps/device/install.sh | sudo sh -s -- --no-remote
+```
+
+The installer turns on **VM mode** by itself when it finds no Wi-Fi radio: no setup Wi-Fi, and
+the box page lets in browsers from the networks you name in `setup_trusted_networks`. Updates
+come from this fork's releases, so VM mode stays on. The full runbook, with checks and caveats,
+is in [OrbStack / VM](docs/get-your-lolobox/build-one-yourself/orbstack-vm.mdx).
+
 ## How it works
 
 ```

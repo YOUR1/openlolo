@@ -324,7 +324,7 @@ async def test_software_update_routes(box, monkeypatch):
     updates.installed = "0.0.2"
 
     async def github(url, headers):
-        prefix = "https://github.com/sparkyideainc/openlolo/releases/download/v0.0.3/"
+        prefix = "https://github.com/YOUR1/openlolo/releases/download/v0.0.3/"
         name = "openlolo-device-0.0.3.tar.gz"
         assets = [
             {"name": name, "browser_download_url": prefix + name},

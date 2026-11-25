@@ -21,7 +21,7 @@ upd = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = upd  # dataclasses look the module up while the file executes
 spec.loader.exec_module(upd)
 
-REPO = "sparkyideainc/openlolo"
+REPO = "YOUR1/openlolo"
 NEW = "0.0.3"
 BASE = f"https://github.com/{REPO}/releases/download/v{NEW}/"
 NAME = f"openlolo-device-{NEW}.tar.gz"

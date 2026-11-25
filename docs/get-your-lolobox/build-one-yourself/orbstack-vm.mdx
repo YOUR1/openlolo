@@ -5,7 +5,7 @@ description: Run OpenLolo in a Linux VM on a Mac, with the iPhone passed through
 
 OpenLolo can run in a Debian VM instead of a Raspberry Pi or Radxa box. The iPhone is passed through to the VM over USB. VM mode skips the setup Wi-Fi: the VM has no radio, so you name the network your Mac's browser connects from instead.
 
-Tested with OrbStack on a Mac with Apple silicon.
+Built and tested with [OrbStack](https://orbstack.dev) on a Mac Studio with Apple silicon, iOS 27.2.
 
 <Callout type="warn">
 While the iPhone is attached to the VM, macOS can't see it: no Finder, Xcode or Photos. The Mac must stay awake for your AI to reach the phone. Keep the cable plugged in: controlling the phone over Wi-Fi is not expected to work through the VM's network.
@@ -47,10 +47,10 @@ lsusb
 ### Install in VM mode
 
 ```sh
-curl -fsSL https://openlolo.com/install.sh | sudo sh -s -- --vm --no-remote
+curl -fsSL https://raw.githubusercontent.com/YOUR1/openlolo/main/apps/device/install.sh | sudo sh -s -- --no-remote
 ```
 
-`--vm` writes `setup_ap = false` to `/etc/openlolo/box.toml`, leaves out the setup Wi-Fi services and starts usbmuxd at boot.
+The installer turns on VM mode by itself when it runs in a VM without a Wi-Fi radio; `--vm` forces it on, `--no-vm` off. VM mode writes `setup_ap = false` to `/etc/openlolo/box.toml`, leaves out the setup Wi-Fi services and starts usbmuxd at boot.
 
 </Step>
 <Step>

@@ -35,7 +35,7 @@ from openlolo.domain.errors import OpenLoloError
 log = logging.getLogger("openlolo.update")
 
 UPDATE_UNIT = "openlolo-update.service"  # Root unit: deploy/update/openlolo_update.py
-DEFAULT_REPO = "sparkyideainc/openlolo"
+DEFAULT_REPO = "YOUR1/openlolo"
 REPO_PATTERN = r"^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$"
 VERSION_RE = re.compile(r"^(\d{1,4})\.(\d{1,4})\.(\d{1,6})$")
 ATTEMPT_RE = re.compile(r"^[A-Za-z0-9-]{1,64}$")

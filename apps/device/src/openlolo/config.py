@@ -108,7 +108,7 @@ class Config(StrictModel):
     # offers (forks set their own, as OPENLOLO_REPO in install.sh), and whether the box checks
     # once a day on its own. The owner can always check from the box page; installs always ask.
     update_repo: str = Field(
-        default="sparkyideainc/openlolo", pattern=r"^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$"
+        default="YOUR1/openlolo", pattern=r"^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$"
     )
     update_check: bool = True
     # Auto sleep (PiSugar3 boxes on battery): turn off after this long with no phone and no use,
