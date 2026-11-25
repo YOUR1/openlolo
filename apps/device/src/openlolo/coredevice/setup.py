@@ -56,7 +56,7 @@ async def usb_phones(usb) -> list[dict]:
                 entry["product_version"] = getattr(lockdown, "product_version", None)
             finally:
                 with contextlib.suppress(Exception):
-                    lockdown.close()
+                    await lockdown.close()
         except Exception:
             pass  # Presence alone is still useful.
         result.append(entry)

@@ -41,6 +41,11 @@ tunnel_mode = "userspace"   # "kernel" needs CAP_NET_ADMIN and /dev/net/tun in t
 # portal_port = 80
 provisioning = true
 setup_auto_pair = true
+# VM mode (install.sh --vm): no Wi-Fi radio, so no setup access point. Browsers on the networks
+# below count as "on the box's own Wi-Fi" while the setup window is open; the cable checks
+# still apply. Find the address in: journalctl -u openlolo-api | grep setup_trusted_networks
+# setup_ap = false
+# setup_trusted_networks = ["198.19.249.1/32"]
 # Setup mode ends this long after entry; Local mode this long after the saved phone was last
 # connected (it stays on while the phone is connected).
 setup_timeout_seconds = 600

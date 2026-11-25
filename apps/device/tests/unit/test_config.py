@@ -124,3 +124,17 @@ def test_update_repo_defaults_and_rejects_paths():
     for value in ("../../etc", "you/fork/extra", "you", "you/fo rk"):
         with pytest.raises(ValueError):
             Config(backend="simulated", update_repo=value)
+
+
+def test_trusted_networks_are_normalized_private_cidrs():
+    config = Config(backend="simulated", setup_trusted_networks=["198.19.249.1", "10.0.0.5/24", "fd00::/64"])
+    assert config.setup_ap is True  # The default: a box with its own access point
+    assert config.setup_trusted_networks == ["198.19.249.1/32", "10.0.0.0/24", "fd00::/64"]
+    assert [str(n) for n in config.trusted_networks] == config.setup_trusted_networks
+    assert Config(backend="simulated").trusted_networks == []
+
+
+@pytest.mark.parametrize("value", ["8.8.8.0/24", "0.0.0.0/0", "10.0.0.0/7", "wifi", "10.0.0.0/33"])
+def test_trusted_networks_reject_public_or_invalid(value):
+    with pytest.raises(ValueError, match="setup_trusted_networks"):
+        Config(backend="simulated", setup_trusted_networks=[value])

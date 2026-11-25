@@ -41,7 +41,8 @@ class Runtime:
             self.network: FakeNetwork | NetworkManager = FakeNetwork(["home"])
         else:
             manager = NetworkManager(config.wifi_interface)
-            manager.configure_setup_ap(config)
+            if config.setup_ap:  # VM mode has no radio: no hostapd unit to start or stop.
+                manager.configure_setup_ap(config)
             self.network = manager
         self.reset = ResetChallenge(
             config.runtime_dir / "button-events",

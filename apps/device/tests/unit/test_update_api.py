@@ -82,6 +82,7 @@ def box(tmp_path):
         settings = SimpleNamespace(
             update_repo=config.get("update_repo", REPO),
             update_check=config.get("update_check", True),
+            setup_ap=config.get("setup_ap", True),
             state_dir=tmp_path / "state",
             runtime_dir=tmp_path / "run",
         )
@@ -189,6 +190,13 @@ async def test_local_and_setup_mode_skip_the_check(box):
         updates = box(mode=mode)
         view = await updates.check(manual=True)
         assert updates.fetch.calls == [] and view["check"]["blocked"] == "NO_INTERNET"
+
+
+async def test_vm_mode_checks_while_the_window_is_open(box):
+    # No access point (setup_ap = false): the open window does not take the box offline.
+    updates = box(mode="local", setup_ap=False)
+    view = await updates.check(manual=True)
+    assert view["check"]["blocked"] is None and len(updates.fetch.calls) == 1
 
 
 async def test_manual_checks_coalesce(box):

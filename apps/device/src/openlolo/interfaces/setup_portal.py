@@ -13,6 +13,9 @@ Who gets a session:
 - A box with no saved phone: first-time setup, a browser on the setup access point (joined with
   the card's WPA2 password) while one phone is on the cable.
 
+A box without the access point (VM mode, ``setup_ap = false``) puts the owner's
+``setup_trusted_networks`` in the access point's place; everything else is unchanged.
+
 Factory reset starts here for any browser (``/setup/reset/*``) and is finished at the box with
 the top button (application/reset.py), so a stranger on the home Wi-Fi cannot erase it.
 """
@@ -128,6 +131,8 @@ def create_setup_portal(runtime, *, web: Path = WEB, clock=time.time) -> ASGIApp
 
     sessions = PortalSessions(runtime.journal.db, clock)
     index = web / "index.html"
+    trusted = runtime.config.trusted_networks
+    untrusted_logged: set[ipaddress.IPv4Address | ipaddress.IPv6Address] = set()
 
     # -- page -------------------------------------------------------------------------
 
@@ -153,9 +158,24 @@ def create_setup_portal(runtime, *, web: Path = WEB, clock=time.time) -> ASGIApp
         While the setup window is open the single radio runs the AP, not the home station, so
         every client in the AP subnet associated through the card's WPA2 password. (The ASGI
         ``server`` entry is uvicorn's bind address, never the destination, so it cannot be used
-        to tell the AP apart from a home LAN that also uses 192.168.4.0/24.)"""
+        to tell the AP apart from a home LAN that also uses 192.168.4.0/24.)
+
+        A box without the access point (``setup_ap = false``, VM mode) has no AP subnet; the
+        owner names the networks that stand in for it in ``setup_trusted_networks``, and they
+        count on the same terms: only while the window is open."""
         address = peer(request)
-        return bool(address in AP_NET and runtime.provisioning.active)
+        if address is None or not runtime.provisioning.active:
+            return False
+        address = getattr(address, "ipv4_mapped", None) or address
+        if any(address in network for network in trusted):
+            return True
+        if runtime.config.setup_ap:
+            return address in AP_NET
+        if address not in untrusted_logged and len(untrusted_logged) < 64:
+            untrusted_logged.add(address)
+            # VM mode: the owner reads this line to find the address to add.
+            log.warning("box page: %s is not in setup_trusted_networks", address)
+        return False
 
     async def on_paired_phone(request: Request) -> bool:
         """The request comes from the bound phone's own LAN address (RemotePairing, ADR 0012)."""

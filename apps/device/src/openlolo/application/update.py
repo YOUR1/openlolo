@@ -137,6 +137,7 @@ class Updates:
     ):
         self.repo: str = config.update_repo
         self.automatic: bool = config.update_check
+        self.setup_ap: bool = getattr(config, "setup_ap", True)
         self.installed = installed
         self.provisioning, self.reset = provisioning, reset
         self.start_unit = start_unit
@@ -172,7 +173,9 @@ class Updates:
         """Why the box cannot check or install right now, or None."""
         if self.dev_build:
             return "DEV_BUILD"
-        if self.provisioning is not None and self.provisioning.mode != "wifi":
+        # The setup access point takes the only radio off the home Wi-Fi. A box without one
+        # (setup_ap = false, VM mode) stays online while the window is open.
+        if self.provisioning is not None and self.provisioning.mode != "wifi" and self.setup_ap:
             return "NO_INTERNET"
         return None
 

@@ -93,6 +93,13 @@ class Config(StrictModel):
     portal_port: int = Field(default=80, ge=0, le=65535)
     setup_name: str | None = None  # SoftAP SSID and matching .local hostname stem; board-specific.
     setup_auto_pair: bool = True  # Trust-pair and bind the single cabled iPhone during setup mode.
+    # VM mode (install.sh --vm): a box without a Wi-Fi radio, such as a Linux VM with the iPhone
+    # passed through over USB. false: the setup window opens without the hostapd access point, and
+    # 192.168.4.0/24 no longer counts as the box's own Wi-Fi.
+    setup_ap: bool = True
+    # Private networks (CIDR) whose browsers count as "on the box's own Wi-Fi" while the setup
+    # window is open, e.g. the VM host's address as "198.19.249.1/32". The cable checks still apply.
+    setup_trusted_networks: list[str] = []
     setup_ap_password: str | None = None  # Generated and persisted by Runtime; printed on setup card.
     setup_timeout_seconds: float = Field(default=600, ge=60, le=3600)
     setup_grace_seconds: float = Field(default=120, ge=10, le=3600)
@@ -146,7 +153,12 @@ class Config(StrictModel):
             raise ValueError("setup_name must be 1..20 bytes (it is the setup SSID and hostname stem)")
         if not re.fullmatch(r"[A-Za-z0-9_.-]{1,15}", self.wifi_interface):
             raise ValueError("wifi_interface must be an interface name")
+        self.setup_trusted_networks = [trusted_network(n) for n in self.setup_trusted_networks]
         return self
+
+    @property
+    def trusted_networks(self) -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
+        return [ipaddress.ip_network(n) for n in self.setup_trusted_networks]
 
     @property
     def box_id(self) -> str | None:
@@ -192,6 +204,19 @@ def public_origin(value: str) -> str:
         raise ValueError("public_url must be a bare https origin such as https://pi.tailnet.ts.net")
     port = f":{parsed.port}" if parsed.port not in {None, 443} else ""
     return f"https://{parsed.hostname.lower()}{port}"
+
+
+def trusted_network(value: str) -> str:
+    """A private or loopback network in CIDR form; host bits are dropped ("10.0.0.5/24" -> "10.0.0.0/24")."""
+    try:
+        network = ipaddress.ip_network(value, strict=False)
+    except ValueError:
+        raise ValueError(
+            f"setup_trusted_networks: {value!r} is not a network such as 192.168.1.0/24"
+        ) from None
+    if not (network.is_private or network.is_loopback):
+        raise ValueError(f"setup_trusted_networks: {value!r} is not a private network")
+    return str(network)
 
 
 def load_config(path: str | Path = "/etc/openlolo/box.toml") -> Config:

@@ -1,0 +1,101 @@
+---
+title: OrbStack / VM
+description: Run OpenLolo in a Linux VM on a Mac, with the iPhone passed through over USB.
+---
+
+OpenLolo can run in a Debian VM instead of a Raspberry Pi or Radxa box. The iPhone is passed through to the VM over USB. VM mode skips the setup Wi-Fi: the VM has no radio, so you name the network your Mac's browser connects from instead.
+
+Tested with OrbStack on a Mac with Apple silicon.
+
+<Callout type="warn">
+While the iPhone is attached to the VM, macOS can't see it: no Finder, Xcode or Photos. The Mac must stay awake for your AI to reach the phone. Keep the cable plugged in: controlling the phone over Wi-Fi is not expected to work through the VM's network.
+</Callout>
+
+<Steps>
+<Step>
+
+### Create the machine and attach the iPhone
+
+On the Mac:
+
+```sh
+orb create debian:trixie lolobox
+orb usb list
+orb usb attach <id> -m lolobox
+orb -m lolobox
+```
+
+`orb usb list` shows the iPhone's ID. Keep `-m lolobox`: the iPhone's USB network interface must land in this machine.
+
+</Step>
+<Step>
+
+### Check that the machine sees the iPhone
+
+In the machine:
+
+```sh
+sudo apt update && sudo apt install -y usbutils usbmuxd
+lsusb
+```
+
+`lsusb` should list `05ac:12a8 Apple iPhone`. Unlock the phone, then run `sudo systemctl restart usbmuxd`.
+
+</Step>
+<Step>
+
+### Install in VM mode
+
+```sh
+curl -fsSL https://openlolo.com/install.sh | sudo sh -s -- --vm --no-remote
+```
+
+`--vm` writes `setup_ap = false` to `/etc/openlolo/box.toml`, leaves out the setup Wi-Fi services and starts usbmuxd at boot.
+
+</Step>
+<Step>
+
+### Let your Mac's browser in
+
+Open `http://openlolo-<id>.local` on the Mac. The installer prints the exact address. The first time, the page doesn't let you in. Find the address your Mac connects from:
+
+```sh
+sudo journalctl -u openlolo-api | grep setup_trusted_networks
+```
+
+Add that address to `/etc/openlolo/box.toml` (yours may differ from this example), then restart:
+
+```toml
+setup_trusted_networks = ["198.19.249.1/32"]
+```
+
+```sh
+sudo systemctl restart openlolo-api
+```
+
+Only private addresses are accepted. The page still needs the iPhone on the cable, and it lets a new browser in only while the setup window is open.
+
+</Step>
+<Step>
+
+### Pair the iPhone
+
+With the iPhone unlocked and cabled, tap **Trust**, turn on Developer Mode, then reload the page and approve your AI under **Access**.
+
+</Step>
+</Steps>
+
+## Check it
+
+```sh
+curl -s http://localhost/setup/status | python3 -m json.tool
+```
+
+`usb_pairing.state` should be `bound`.
+
+## If the page stops letting you in
+
+The setup window stays open while the iPhone is connected. If the phone has been away for more than 10 minutes, the window closes. Pages that are already signed in keep working. To sign in from a new browser, reconnect the phone and run `sudo systemctl restart openlolo-api`.
+
+{/* TODO: confirm whether the iPhone must be attached again (orb usb attach) after a Mac or VM restart. */}
+{/* TODO: confirm remote access with Tailscale inside the VM (install without --no-remote). */}

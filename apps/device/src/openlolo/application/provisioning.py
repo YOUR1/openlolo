@@ -216,12 +216,22 @@ class Provisioning:
             raise OpenLoloError("PROVISIONING_DISABLED", status=409)
         if self.state in {ProvisioningState.JOINING, ProvisioningState.VERIFYING}:
             raise OpenLoloError("PROVISIONING_BUSY", "A Wi-Fi join is in progress", 409)
-        await self.network.start_setup_ap()
+        await self._start_ap()
         self.window = True
         self.holdable = True
         self.expires = self.clock() + self.config.setup_timeout_seconds
         self._set(ProvisioningState.SETUP_MODE, reason)
         self._show()
+
+    async def _start_ap(self) -> None:
+        """The setup access point, unless the box has none (``setup_ap = false``, VM mode): then
+        the window is the same bounded state without the hotspot."""
+        if self.config.setup_ap:
+            await self.network.start_setup_ap()
+
+    async def _stop_ap(self) -> None:
+        if self.config.setup_ap:
+            await self.network.stop_setup_ap()
 
     async def exit(self) -> None:
         await self.finish("exit")
@@ -233,7 +243,7 @@ class Provisioning:
         self.expires = None
         self.holdable = False
         self.window = False
-        await self.network.stop_setup_ap()
+        await self._stop_ap()
         if self.state != ProvisioningState.DISABLED:
             self._set(ProvisioningState.IDLE, reason)
         self._show()
@@ -290,7 +300,7 @@ class Provisioning:
                 await self.network.forget(name)  # Only the profile this attempt created.
             if in_setup:
                 with contextlib.suppress(Exception):
-                    await self.network.start_setup_ap()
+                    await self._start_ap()
                 self.expires = self.clock() + self.config.setup_timeout_seconds
                 self._set(ProvisioningState.SETUP_MODE, "join failed")
             else:
@@ -308,7 +318,7 @@ class Provisioning:
                     try:
                         # If a LAN-originated change leaves no working station link, expose the
                         # normal bounded recovery AP so the user can correct the credentials.
-                        await self.network.start_setup_ap()
+                        await self._start_ap()
                     except Exception:
                         log.exception("could not start Wi-Fi recovery access point")
                         self._set(ProvisioningState.IDLE, "join failed; recovery AP unavailable")
@@ -523,4 +533,4 @@ class Provisioning:
                     await task
         self.task = self.worker = None
         with contextlib.suppress(Exception):
-            await self.network.stop_setup_ap()
+            await self._stop_ap()

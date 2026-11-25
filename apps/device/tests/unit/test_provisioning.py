@@ -40,6 +40,10 @@ def calls(network, name):
     return [c for c in network.calls if c[0] == name]
 
 
+def hotspot(network):
+    return [c for c in network.calls if c[0] in {"start_setup_ap", "stop_setup_ap"}]
+
+
 async def test_setup_mode_is_a_window_on_the_setup_ap(tmp_path):
     net = FakeNetwork()
     prov, _ = build(tmp_path, net)
@@ -603,3 +607,36 @@ async def test_recovery_ap_keeps_its_fixed_timeout(tmp_path):
     clock.advance(600)
     await prov.tick()
     assert not prov.window and prov.reason == "timeout"
+
+
+async def test_vm_mode_opens_the_window_without_a_hotspot(tmp_path):
+    # setup_ap = false: no radio. The boot entry opens the same bounded window without hostapd.
+    net = FakeNetwork()
+    prov, clock = build(tmp_path, net, setup_ap=False)
+    await prov.tick()
+    assert prov.state == ProvisioningState.SETUP_MODE and prov.active and prov.holdable
+    assert prov.reason == "no saved network" and prov.health()["expires_in"] == 600
+    assert hotspot(net) == [] and not net.setup_ap_active
+    clock.advance(600)
+    await prov.tick()
+    assert not prov.active and prov.reason == "timeout" and hotspot(net) == []
+    await prov.enter("api")
+    await prov.close()
+    assert hotspot(net) == []
+
+
+async def test_vm_mode_join_failure_starts_no_hotspot(tmp_path):
+    net = FakeNetwork()
+    prov, _ = build(tmp_path, net, setup_ap=False)
+    await prov.enter("api")
+    await prov.connect("HomeNet", "wrong")
+    await prov.worker
+    assert prov.state == ProvisioningState.SETUP_MODE and prov.reason == "join failed" and prov.active
+    assert ("start_setup_ap",) not in net.calls and not net.setup_ap_active
+    await prov.exit()
+    prov.window = False
+    net.calls.clear()
+    await prov.connect("Nowhere", "x")  # From the home network, nothing to restore
+    await prov.worker
+    assert prov.reason == "join failed; recovery AP" and prov.active
+    assert ("start_setup_ap",) not in net.calls

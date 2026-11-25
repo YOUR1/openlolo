@@ -296,3 +296,59 @@ async def test_box_without_the_button_keeps_the_typed_reset(portal, runtime):
         assert status["reset_method"] == "name"
         refused = await c.post("/setup/reset/start", headers=WRITE)
         assert refused.status_code == 409 and refused.json()["error"]["code"] == "RESET_BUTTON_UNAVAILABLE"
+
+
+MAC = ("198.19.249.1", 50000)  # The VM host's address as the box sees it
+
+
+def vm(runtime, web, clock, trusted=("198.19.249.1/32",)):
+    """VM mode: no access point; the listed networks stand in for it."""
+    runtime.config.setup_ap = False
+    runtime.config.setup_trusted_networks = list(trusted)
+    return create_setup_portal(runtime, web=web, clock=clock)
+
+
+async def test_vm_mode_trusts_only_the_listed_networks(runtime, web, clock):
+    portal = vm(runtime, web, clock)
+    runtime.bindings.delete()  # First-time setup
+    await runtime.provisioning.enter(reason="test")
+    async with browser(portal, client=MAC) as c:
+        status = (await c.get("/setup/status")).json()
+        assert status["access"]["setup_ap"] is True and status["access"]["reason"] == "cable"
+        assert (await c.post("/setup/session", headers=WRITE)).status_code == 200
+    async with browser(portal, client=("::ffff:198.19.249.1", 50000)) as c:
+        assert (await c.get("/setup/status")).json()["access"]["allowed"] is True
+    for outsider in (("198.19.249.2", 50000), ("192.168.4.25", 50000)):  # No AP subnet in VM mode
+        async with browser(portal, client=outsider) as c:
+            refused = await c.post("/setup/session", headers=WRITE)
+            assert refused.status_code == 403 and refused.json()["error"]["code"] == "PHONE_REQUIRED"
+    unplug(runtime)
+    async with browser(portal, client=MAC) as c:
+        refused = await c.post("/setup/session", headers=WRITE)
+        assert refused.status_code == 403 and refused.json()["error"]["code"] == "CABLE_REQUIRED"
+
+
+async def test_vm_mode_needs_the_saved_phone_on_the_cable_and_the_window(runtime, web, clock):
+    portal = vm(runtime, web, clock)
+    async with browser(portal, client=MAC) as c:  # Window closed: the network alone is not enough
+        assert (await c.get("/setup/status")).json()["access"]["allowed"] is False
+    await runtime.provisioning.enter(reason="test")
+    async with browser(portal, client=MAC) as c:
+        status = (await c.get("/setup/status")).json()
+        assert status["mode"] == "local" and status["access"]["reason"] == "cable"
+    runtime.phone.device.cabled = [{"udid": "stranger", "product_type": None, "product_version": None}]
+    runtime.phone._usb_cache = None
+    async with browser(portal, client=MAC) as c:
+        refused = await c.post("/setup/session", headers=WRITE)
+        assert refused.status_code == 403 and refused.json()["error"]["code"] == "NOT_OWNER"
+
+
+async def test_vm_mode_without_trusted_networks_logs_the_address(runtime, web, clock, caplog):
+    portal = vm(runtime, web, clock, trusted=())
+    runtime.bindings.delete()
+    await runtime.provisioning.enter(reason="test")
+    async with browser(portal, client=MAC) as c:
+        for _ in range(3):
+            assert (await c.get("/setup/status")).json()["access"]["allowed"] is False
+    lines = [r.getMessage() for r in caplog.records if "setup_trusted_networks" in r.getMessage()]
+    assert lines == ["box page: 198.19.249.1 is not in setup_trusted_networks"]  # Once per address

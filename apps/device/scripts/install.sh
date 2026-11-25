@@ -13,7 +13,7 @@ case "${ID:-}:${VERSION_CODENAME:-}" in
   debian:trixie|raspios:trixie|raspbian:trixie) ;;
   *) echo "Supported systems are Debian 13 ARM64 and Raspberry Pi OS 64-bit (trixie); found ${PRETTY_NAME:-unknown}." >&2; exit 1 ;;
 esac
-usage='Usage: install.sh [source-directory] [--remote tailscale|cloudflare | --no-remote] [--auth-key KEY] [--hostname HOST] [--tunnel-token TOKEN] [--wifi-country CC] [--debug] [--upgrade]'
+usage='Usage: install.sh [source-directory] [--remote tailscale|cloudflare | --no-remote] [--auth-key KEY] [--hostname HOST] [--tunnel-token TOKEN] [--wifi-country CC] [--vm [--trusted-network CIDR]...] [--debug] [--upgrade]'
 source_dir=
 remote=tailscale   # Remote MCP entry (ADR 0003) is part of the standard install; --no-remote for LAN-only.
 auth_key=${TS_AUTHKEY:-}           # Tailscale auth key (unattended tailnet join).
@@ -21,6 +21,11 @@ hostname=${OPENLOLO_HOSTNAME:-}   # Cloudflare only (--remote cloudflare): publi
 tunnel_token=${TUNNEL_TOKEN:-}     # Cloudflare only: dashboard-managed tunnel token (unattended).
 wifi_country=${WIFI_COUNTRY:-}
 debug=   # --debug: keep the journal across power loss (bench boxes; adds storage writes).
+# --vm: a box without a Wi-Fi radio, e.g. a Linux VM with the iPhone passed through over USB
+# (OrbStack, UTM). No setup access point (setup_ap = false in box.toml); --trusted-network names
+# the private networks whose browsers stand in for the box's own Wi-Fi (setup_trusted_networks).
+vm=
+trusted_networks=
 # --upgrade: unattended update of an installed box (openlolo-update.service). Keeps the options
 # recorded in /etc/openlolo/install.env, leaves remote access alone, skips apt-get when the OS
 # package list is unchanged, and keeps the old build as /opt/openlolo/previous for the caller's
@@ -33,6 +38,11 @@ while [ $# -gt 0 ]; do
     --remote) remote=${2:?--remote needs a provider (tailscale or cloudflare)}; shift 2 ;;
     --no-remote) remote=; shift ;;
     --debug) debug=1; shift ;;
+    --vm) vm=1; shift ;;
+    --trusted-network)
+      net=${2:?--trusted-network needs a CIDR such as 198.19.249.1/32}
+      case "$net" in *[!0-9A-Fa-f.:/]*|'') echo "Not a network: $net" >&2; exit 1 ;; esac
+      trusted_networks="$trusted_networks${trusted_networks:+ }$net"; shift 2 ;;
     --upgrade) upgrade=1; shift ;;
     --hostname) hostname=${2:?--hostname needs a value}; shift 2 ;;
     --tunnel-token) tunnel_token=${2:?--tunnel-token needs a value}; shift 2 ;;
@@ -48,7 +58,7 @@ recorded() { sed -n "s/^$1=//p" "$install_env" 2>/dev/null | tail -1; }
 if [ -n "$upgrade" ]; then
   [ -e /opt/openlolo/current ] || { echo '--upgrade needs an installed box (/opt/openlolo/current)' >&2; exit 1; }
   if [ -f "$install_env" ]; then
-    remote=$(recorded remote); debug=$(recorded debug); wifi_country=$(recorded wifi_country)
+    remote=$(recorded remote); debug=$(recorded debug); wifi_country=$(recorded wifi_country); vm=$(recorded vm)
   else
     # Installed before install.env existed: keep what the box has now.
     remote=$(recorded remote)
@@ -57,7 +67,8 @@ if [ -n "$upgrade" ]; then
 fi
 remote_record=$remote   # what install.env keeps; an upgrade never runs the remote-access step
 [ -z "$upgrade" ] || remote=
-[ -n "$wifi_country" ] || [ -n "$upgrade" ] || wifi_country=US
+[ -n "$wifi_country" ] || [ -n "$upgrade" ] || [ -n "$vm" ] || wifi_country=US
+[ -z "$trusted_networks" ] || [ -n "$vm" ] || { echo '--trusted-network needs --vm' >&2; exit 1; }
 case "$remote" in ''|tailscale|cloudflare) ;; *) echo "Unsupported --remote provider: $remote" >&2; exit 1 ;; esac
 # The version is the GitHub release tag stamped by scripts/package.sh; a plain checkout is a dev build.
 release=$(sed -n 's/^release=//p' "$source_dir/RELEASE" 2>/dev/null | head -1)
@@ -95,6 +106,8 @@ if [ "$board" = radxa-zero3w ]; then
 fi
 # usbmuxd needs the iPhone's multiplexing USB configuration, which apple_mfi_fastcharge undoes
 # (see the file). The module is not in the initramfs, so no update-initramfs is needed.
+# Minimal Debian images (VMs, containers) have no /etc/modprobe.d.
+install -d -m 0755 /etc/modprobe.d
 cmp -s "$source_dir/deploy/modprobe/openlolo-usbmux.conf" /etc/modprobe.d/openlolo-usbmux.conf ||
   install -m 0644 "$source_dir/deploy/modprobe/openlolo-usbmux.conf" /etc/modprobe.d/openlolo-usbmux.conf
 if grep -q '^apple_mfi_fastcharge ' /proc/modules; then
@@ -133,6 +146,28 @@ if [ "$board" != auto ] && ! grep -qE '^[[:space:]]*board[[:space:]]*=' /etc/ope
   printf '\n# Hardware profile detected by the installer.\nboard = "%s"\n' "$board" >> /etc/openlolo/box.toml
 fi
 install -m 0644 deploy/systemd/openlolo-*.service /etc/systemd/system/
+if [ -n "$vm" ]; then
+  # No radio: the API never starts the setup access point or its scan, so leave their units out.
+  for unit in openlolo-setup-ap.service openlolo-wifi-scan.service; do
+    systemctl disable --now "$unit" 2>/dev/null || true
+    rm -f "/etc/systemd/system/$unit"
+  done
+  if ! grep -qE '^[[:space:]]*setup_ap[[:space:]]*=' /etc/openlolo/box.toml; then
+    printf '\n# VM mode (install.sh --vm): no Wi-Fi radio, no setup access point.\nsetup_ap = false\n' >> /etc/openlolo/box.toml
+  fi
+  if [ -n "$trusted_networks" ]; then
+    # The API refuses to start on a network it rejects; check with its own rule first.
+    # shellcheck disable=SC2086
+    .venv/bin/python -c 'import sys; from openlolo.config import trusted_network as t; [t(n) for n in sys.argv[1:]]' \
+      $trusted_networks || { echo '--trusted-network must be a private network such as 198.19.249.1/32' >&2; exit 1; }
+    list=$(printf '%s\n' $trusted_networks | sed 's/.*/"&"/' | paste -sd, - | sed 's/,/, /g')
+    if grep -qE '^[[:space:]]*setup_trusted_networks[[:space:]]*=' /etc/openlolo/box.toml; then
+      sed -i -E "s|^[[:space:]]*setup_trusted_networks[[:space:]]*=.*|setup_trusted_networks = [$list]|" /etc/openlolo/box.toml
+    else
+      printf 'setup_trusted_networks = [%s]\n' "$list" >> /etc/openlolo/box.toml
+    fi
+  fi
+fi
 # The PiSugar3 drop-in turns the GPIO button unit into the PiSugar3 top button and LED daemon.
 if [ "$board" = radxa-zero3w ]; then
   install -d -m 0755 /etc/systemd/system/openlolo-button.service.d
@@ -140,13 +175,17 @@ if [ "$board" = radxa-zero3w ]; then
 fi
 
 # Wi-Fi access-point setup and station mode need a configured regulatory country.
-if [ -n "$wifi_country" ]; then   # empty only on an upgrade of a box installed before install.env
+if [ -n "$vm" ]; then
+  :   # No radio to configure.
+elif [ -n "$wifi_country" ]; then   # empty only on an upgrade of a box installed before install.env
   case "$wifi_country" in [A-Z][A-Z]) ;; *) echo 'Wi-Fi country must be a two-letter code, e.g. US' >&2; exit 1 ;; esac
   if command -v raspi-config >/dev/null 2>&1; then raspi-config nonint do_wifi_country "$wifi_country" || true; fi
   command -v iw >/dev/null 2>&1 && iw reg set "$wifi_country" 2>/dev/null || true
 fi
-command -v rfkill >/dev/null 2>&1 && rfkill unblock wifi 2>/dev/null || true
-nmcli radio wifi on || true
+if [ -z "$vm" ]; then
+  command -v rfkill >/dev/null 2>&1 && rfkill unblock wifi 2>/dev/null || true
+  nmcli radio wifi on || true
+fi
 # The setup access point is hostapd under openlolo-setup-ap.service (ADR 0011 amendment);
 # NetworkManager keeps station mode only. Drop the SoftAP profile and captive DNS rule earlier
 # releases created, and keep Debian's stock hostapd unit from grabbing the radio at boot.
@@ -254,6 +293,8 @@ install -d -m 0755 /var/lib/openlolo/update
 [ "$board" != radxa-zero3w ] ||
   install -m 0644 "$root/current/deploy/radxa-zero3w/openlolo-board.service" /etc/systemd/system/
 systemctl daemon-reload
+# A VM may not see the udev hotplug event that normally starts usbmuxd; ask for it at boot too.
+[ -z "$vm" ] || systemctl enable usbmuxd 2>/dev/null || true
 systemctl restart usbmuxd
 systemctl enable --now openlolo-device openlolo-api
 systemctl enable openlolo-update-recover.service
@@ -341,8 +382,8 @@ case "$remote" in
     ;;
 esac
 # Options for the next --upgrade. Never auth keys or tunnel tokens.
-printf '# Written by install.sh; read by install.sh --upgrade.\nremote=%s\ndebug=%s\nwifi_country=%s\n' \
-  "$remote_record" "$debug" "$wifi_country" > "$install_env.tmp"
+printf '# Written by install.sh; read by install.sh --upgrade.\nremote=%s\ndebug=%s\nwifi_country=%s\nvm=%s\n' \
+  "$remote_record" "$debug" "$wifi_country" "$vm" > "$install_env.tmp"
 mv "$install_env.tmp" "$install_env"
 if [ -n "$upgrade" ]; then
   printf 'OPENLOLO_INSTALL_RESULT release=%s apt=%s\n' "$release" "$([ -n "$skip_apt" ] && echo skipped || echo ran)"
@@ -353,6 +394,16 @@ for _ in $(seq 1 30); do
   [ -s /var/lib/openlolo/openlolo.sqlite3 ] && break
   sleep 1
 done
+if [ -n "$vm" ]; then
+  printf '\niPhone setup (VM mode)\n'
+  printf 'Connect the iPhone by USB, unlock it and tap Trust. Then open http://%s on this computer.\n' "$lan_host"
+  if ! grep -qE '^[[:space:]]*setup_trusted_networks[[:space:]]*=' /etc/openlolo/box.toml; then
+    printf 'No trusted network is set, so the page will not let you in yet. Open it once, then run\n'
+    printf '  journalctl -u openlolo-api | grep setup_trusted_networks\n'
+    printf 'and reinstall with --vm --trusted-network <that address>/32.\n'
+  fi
+  exit 0
+fi
 printf '\niPhone setup\n'
 printf 'Connect the iPhone by USB. Unlock it and tap Trust if asked.\n'
 printf 'Scan both codes below with the iPhone camera, in order.\n\n'
