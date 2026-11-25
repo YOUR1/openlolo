@@ -10,28 +10,67 @@ every AI that connects, and you can stop it at any time.
 [Website](https://openlolo.com) · [Docs](https://openlolo.com/docs/introduction) ·
 [Shop](https://openlolo.com/shop)
 
-## Run it from a VM (this fork)
+## Run it from a VM with OrbStack (this fork)
 
-This fork runs OpenLolo in a Linux VM on your Mac, with no LoloBox needed. We built and tested
-it with [OrbStack](https://orbstack.dev) on a Mac Studio with Apple silicon. OrbStack passes the
-iPhone through to a Debian machine over USB.
+This fork runs OpenLolo in a Linux VM on your Mac, so you don't need a LoloBox. We built and
+tested it with [OrbStack](https://orbstack.dev) on a Mac Studio with Apple silicon and an iPhone
+on iOS 27.2. OrbStack passes the iPhone through to a Debian machine over USB.
+
+You need a Mac with Apple silicon, [OrbStack](https://orbstack.dev) installed, and an iPhone on
+iOS 26 or later with its USB cable.
+
+**1. Create the machine and attach the iPhone.** On the Mac:
 
 ```sh
 orb create debian:trixie lolobox
-orb usb attach <iphone-id> -m lolobox    # find the ID with: orb usb list
+orb usb list                        # note the iPhone's ID
+orb usb attach <iphone-id> -m lolobox
 orb -m lolobox
 ```
 
-Then, in the machine:
+Keep `-m lolobox`: the iPhone's USB network interface must land in this machine.
+
+**2. Install OpenLolo.** In the machine, with the iPhone unlocked:
 
 ```sh
+sudo apt update && sudo apt install -y curl
 curl -fsSL https://raw.githubusercontent.com/YOUR1/openlolo/main/apps/device/install.sh | sudo sh -s -- --no-remote
 ```
 
-The installer turns on **VM mode** by itself when it finds no Wi-Fi radio: no setup Wi-Fi, and
-the box page lets in browsers from the networks you name in `setup_trusted_networks`. Updates
-come from this fork's releases, so VM mode stays on. The full runbook, with checks and caveats,
-is in [OrbStack / VM](docs/get-your-lolobox/build-one-yourself/orbstack-vm.mdx).
+This installs the latest [release of this fork](https://github.com/YOUR1/openlolo/releases)
+(`v0.0.4` or later has VM mode). To pin one:
+`... | sudo env OPENLOLO_RELEASE=0.0.4 sh -s -- --no-remote`. The installer turns on **VM mode** by
+itself when it finds no Wi-Fi radio: no setup Wi-Fi, and it prints the box page address,
+`http://openlolo-<id>.local`.
+
+**3. Let your Mac's browser in.** Open the box page on the Mac. The first time it won't let you
+in. Find the address your Mac connects from:
+
+```sh
+sudo journalctl -u openlolo-api | grep setup_trusted_networks
+```
+
+Add that address to `/etc/openlolo/box.toml` (yours may differ from this example) and restart:
+
+```toml
+setup_trusted_networks = ["198.19.249.1/32"]
+```
+
+```sh
+sudo systemctl restart openlolo-api
+```
+
+**4. Pair the iPhone.** With it unlocked and on the cable, tap **Trust**, turn on Developer Mode,
+reload the box page and approve your AI under **Access**. To check:
+
+```sh
+curl -s http://localhost/setup/status | python3 -m json.tool   # usb_pairing.state: "bound"
+```
+
+While the iPhone is attached to the VM, macOS can't see it (no Finder, Xcode or Photos), and the
+Mac must stay awake for your AI to reach the phone. Updates come from this fork's releases, so
+VM mode stays on. More detail and caveats:
+[OrbStack / VM](docs/get-your-lolobox/build-one-yourself/orbstack-vm.mdx).
 
 ## How it works
 

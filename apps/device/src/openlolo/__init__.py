@@ -1,3 +1,3 @@
 """OpenLolo: an open-source AI assistant for iOS devices."""
 
-__version__ = "0.0.3"
+__version__ = "0.0.4"
